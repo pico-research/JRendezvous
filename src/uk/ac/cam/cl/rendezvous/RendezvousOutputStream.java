@@ -1,60 +1,16 @@
 package uk.ac.cam.cl.rendezvous;
 
-import java.io.BufferedOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 
-import uk.ac.cam.cl.rendezvous.org.apache.commons.codec.binary.Base64;
+public class RendezvousOutputStream extends OutputStream implements InterruptibleStream {
 
-public class RendezvousOutputStream extends OutputStream {
+	private final RendezvousChannel rendezvousChannel;
+	private volatile boolean isOpen = true;
 
-	private final URL rendezvousUrl;
-	
-	public RendezvousOutputStream(URL rendezvousUrl) {
-		this.rendezvousUrl = rendezvousUrl;
-	}
-	
-	private HttpURLConnection attemptWrite(byte[] bytes) throws IOException {
-		// Form request body
-		final String b64bytes = Base64.encodeBase64String(bytes);
-		final String request = "data=" + b64bytes;
-		final byte[] requestBytes = request.getBytes("UTF-8");
-		
-		// Do request
-		final HttpURLConnection connection = (HttpURLConnection) rendezvousUrl.openConnection();
-		
-		connection.setRequestMethod("POST");
-		connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=utf-8");
-		connection.setRequestProperty("Content-Length", Integer.toString(requestBytes.length));
-		
-		connection.setDoOutput(true);
-		OutputStream os = null;
-        try {
-            os = connection.getOutputStream();
-            os.write(requestBytes);
-            os.flush();
-        } finally {
-            if (os != null) {
-                os.close();
-            }
-        }
-        
-        // Make request...
-        final int responseCode = connection.getResponseCode();
-        
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-        	return connection;
-        } else if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
-        	throw new IOException("no such channel: " + rendezvousUrl);
-        } else {
-        	throw new IOException(String.format(
-					"inavlid HTTP response code: %d %s",
-					responseCode,
-					connection.getResponseMessage()));
-        }
+	public RendezvousOutputStream(RendezvousChannel rendezvousChannel) {
+		this.rendezvousChannel = rendezvousChannel;
 	}
 	
 	@Override
@@ -68,18 +24,18 @@ public class RendezvousOutputStream extends OutputStream {
 			bytes = b;
 		}
 		
-		while (true) {
-			HttpURLConnection connection = attemptWrite(bytes); // throws IOException if not 200 OK
+		while (isOpen) {
+			HttpURLConnection connection = rendezvousChannel.attemptWrite(bytes); // throws
+																				  // IOException if
+																				  // not 200 OK
 			RendezvousResponse response = RendezvousResponse.fromConnection(connection);
 			if (response.code == 0) {
 				// Write was successful, finish
-				break;
+				return;
 			} else if (response.code == RendezvousResponse.TIMED_OUT) {
-				// Timed out
-				// Not sure what to do here, but for now throw an IOException and let the caller 
-				// deal with it... Might well benefit from implementing a java.nio Channel
+				// Timed out, try again, unless closed by another thread.
+				// Might well benefit from implementing a java.nio Channel
 				// subclasses instead of the input and output streams
-				throw new IOException("write to rendezvous point timed out");
 			} else {
 				// An error occured (rendezvous layer i.e. not HTTP 404)
 				throw new IOException(String.format(
@@ -88,6 +44,8 @@ public class RendezvousOutputStream extends OutputStream {
 						response.message));
 			}
 		}
+		// Close the Rendezvous Point
+		throw new IOException("write to rendezvous which has been closed");
 	}
 	
 	@Override
@@ -95,18 +53,28 @@ public class RendezvousOutputStream extends OutputStream {
 		write(new byte[] { (byte) b}, 0, 1);		
 	}
 	
-	public static void main(String[] args) throws Exception {
-		OutputStream os = new RendezvousOutputStream(
-				new URL("http://rendezvous.pico.cl.cam.ac.uk:8080/channel/test"));
-		DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(os));
-		
-		byte[] b1 = new String("hello, world\n").getBytes();
-		byte[] b2 = new String("second message here\n").getBytes();
-		dos.writeInt(b1.length);
-		dos.write(b1);
-		dos.writeInt(b2.length);
-		dos.write(b2);
-		dos.flush();
-		dos.close();
+	/* public static void main(String[] args) throws Exception { OutputStream os = new
+	 * RendezvousOutputStream( new URL(
+	 * "http://127.0.0.1:8080/channel/04c46c75a41d477ca9b6b67789b0d648")); DataOutputStream dos =
+	 * new DataOutputStream(new BufferedOutputStream(os)); // DataOutputStream dos = new
+	 * DataOutputStream(os);
+	 * 
+	 * byte[] b1 = new String("hello, world\n").getBytes(); byte[] b2 = new
+	 * String("second message here\n").getBytes(); dos.writeInt(b1.length); dos.write(b1);
+	 * dos.writeInt(b2.length); dos.write(b2); dos.flush(); dos.close(); } */
+
+	/**
+	 * Closes the output stream, any writes that have not been acknowledged will be cancelled when
+	 * they time out.
+	 */
+	@Override
+	public void close() throws IOException {
+		isOpen = false;
+		super.close();
+	}
+
+	@Override
+	public boolean isOpen() {
+		return isOpen;
 	}
 }

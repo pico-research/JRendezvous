@@ -7,8 +7,11 @@ import java.net.URL;
 
 import org.apache.commons.io.IOUtils;
 
+/**
+ * Provides a clean interface for obtaining new rendezvous channels from the rendezvous point.
+ */
 public class RendezvousClient {
-	
+
 	private static final String NEW_PATH = "new";
 	private static final String CHANNEL_PATH = "channel/%s";
 	
