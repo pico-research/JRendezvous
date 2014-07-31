@@ -23,11 +23,11 @@
     </path>
 
     <!-- Compile the java code from src into build -->
-    <javac srcdir="libsrc" destdir="build">
+    <javac srcdir="libsrc" destdir="build" target="1.6">
       <classpath refid="mainclasspath"/>
     </javac>
 
-    <javac srcdir="src" destdir="build">
+    <javac srcdir="src" destdir="build" target="1.6">
       <classpath refid="mainclasspath"/>
     </javac>
 
