@@ -32,6 +32,10 @@ public class RendezvousClient {
 		}
 	}
 	
+	public RendezvousClient(String root) throws MalformedURLException {
+		this(new URL(root));
+	}
+	
 	public RendezvousChannel newChannel() throws IOException {
 		URL newUrl;
 		try {

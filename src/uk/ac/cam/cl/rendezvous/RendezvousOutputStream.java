@@ -25,14 +25,14 @@ public class RendezvousOutputStream extends OutputStream implements Interruptibl
 		}
 		
 		while (isOpen) {
-			HttpURLConnection connection = rendezvousChannel.attemptWrite(bytes); // throws
-																				  // IOException if
-																				  // not 200 OK
-			RendezvousResponse response = RendezvousResponse.fromConnection(connection);
+			HttpURLConnection connection = rendezvousChannel.attemptWrite(bytes);
+			// Would have thrown an IOException by this point if response was not 200 OK
+			
+			StatusResponse response = StatusResponse.fromConnection(connection);
 			if (response.code == 0) {
 				// Write was successful, finish
 				return;
-			} else if (response.code == RendezvousResponse.TIMED_OUT) {
+			} else if (response.code == StatusResponse.TIMED_OUT) {
 				// Timed out, try again, unless closed by another thread.
 				// Might well benefit from implementing a java.nio Channel
 				// subclasses instead of the input and output streams
@@ -52,16 +52,6 @@ public class RendezvousOutputStream extends OutputStream implements Interruptibl
 	public void write(int b) throws IOException {
 		write(new byte[] { (byte) b}, 0, 1);		
 	}
-	
-	/* public static void main(String[] args) throws Exception { OutputStream os = new
-	 * RendezvousOutputStream( new URL(
-	 * "http://127.0.0.1:8080/channel/04c46c75a41d477ca9b6b67789b0d648")); DataOutputStream dos =
-	 * new DataOutputStream(new BufferedOutputStream(os)); // DataOutputStream dos = new
-	 * DataOutputStream(os);
-	 * 
-	 * byte[] b1 = new String("hello, world\n").getBytes(); byte[] b2 = new
-	 * String("second message here\n").getBytes(); dos.writeInt(b1.length); dos.write(b1);
-	 * dos.writeInt(b2.length); dos.write(b2); dos.flush(); dos.close(); } */
 
 	/**
 	 * Closes the output stream, any writes that have not been acknowledged will be cancelled when

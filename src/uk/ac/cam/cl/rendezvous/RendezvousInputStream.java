@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 
+import org.apache.commons.io.IOUtils;
+
 /**
  * An InputStream for accessing data written to a Rendezvous point.
  * 
@@ -28,29 +30,36 @@ public class RendezvousInputStream extends InputStream implements InterruptibleS
 	
 	private int readFromRendezvous() throws IOException {
 		while (isOpen) {
-			HttpURLConnection connection = rendezvousChannel.attemptRead(); // throws IOException if
-																			// not 200 OK
-			RendezvousResponse response = RendezvousResponse.fromConnection(connection);
-			if (response.code == 0) {
-				// Read was successful, copy data into buffer and return length
-				int len = response.data.length;
+			HttpURLConnection connection = rendezvousChannel.attemptRead();
+			// Would have thrown an IOException by this point if response was not 200 OK
+			
+			final String contentType = connection.getContentType();
+			
+			if (contentType.equals("application/octet-stream")) {
+				// Response contains actual data that has been successfully read, copy data into
+				// buffer and return length
+				final int len = connection.getContentLength();
 				buffer = new byte[len];
-				System.arraycopy(response.data, 0, buffer, 0, len);
+				IOUtils.readFully(connection.getInputStream(), buffer);
 				r = 0;
 				return len;
-			} else if (response.code == RendezvousResponse.TIMED_OUT) {
-				// Timed out, try again, unless closed by another thread.
-				// Might well benefit from implementing a java.nio Channel
-				// subclasses instead of the input and output streams
-			} else if (response.code == RendezvousResponse.CLOSED) {
-				// Channel was closed
-				return -1;
-			} else {
-				// An error occurred (rendezvous layer i.e. not HTTP 404)
-				throw new IOException(String.format(
-						"inavlid rendezvous response code: %d %s",
-						response.code,
-						response.message));
+			} else if (contentType.equals("application/json")) {
+				// Response is a JSON-encoded status message
+				StatusResponse response = StatusResponse.fromConnection(connection);
+				if (response.code == StatusResponse.TIMED_OUT) {
+					// Timed out, try again, unless closed by another thread.
+					// Might well benefit from implementing a java.nio Channel
+					// subclasses instead of the input and output streams
+				} else if (response.code == StatusResponse.CLOSED) {
+					// Channel was closed
+					return -1;
+				} else {
+					// An error occurred (rendezvous layer i.e. not HTTP 404)
+					throw new IOException(String.format(
+							"inavlid rendezvous response code: %d %s",
+							response.code,
+							response.message));
+				}
 			}
 		}
 		// Was closed, tell rendezvous point to close.
