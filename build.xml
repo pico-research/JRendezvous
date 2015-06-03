@@ -17,16 +17,11 @@
     <path id="mainclasspath">
       <pathelement path="src"/>
       <pathelement path="test"/>
-      <pathelement path="libsrc"/>
       <pathelement location="lib/commons-io-2.4.jar"/>
       <pathelement location="lib/gson-2.2.4.jar"/>
     </path>
 
     <!-- Compile the java code from src into build -->
-    <javac srcdir="libsrc" destdir="build" target="1.6" source="1.6" includeantruntime="false">
-      <classpath refid="mainclasspath"/>
-    </javac>
-
     <javac srcdir="src" destdir="build" target="1.6" source="1.6" includeantruntime="false">
       <classpath refid="mainclasspath"/>
     </javac>
