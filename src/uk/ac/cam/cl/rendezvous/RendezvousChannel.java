@@ -6,8 +6,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-import uk.ac.cam.cl.rendezvous.org.apache.commons.codec.binary.Base64;
-
 public class RendezvousChannel {
 	
 	private final URL url;
@@ -39,35 +37,62 @@ public class RendezvousChannel {
 	}
 
 	public void close() throws IOException {
-		isOpen = false;
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+		connection.setRequestMethod("DELETE");
 
-		attemptWriteRequestString("close=true");
+		// Make request...
+		final int responseCode = connection.getResponseCode();
 
-		if (outputStream != null) {
-			outputStream.close();
-			outputStream = null;
-		} else if (inputStream != null) {
-			inputStream.close();
-			inputStream = null;
+		if (responseCode == HttpURLConnection.HTTP_OK) {
+			isOpen = false;
+			if (outputStream != null) {
+				outputStream.close();
+				outputStream = null;
+			} else if (inputStream != null) {
+				inputStream.close();
+				inputStream = null;
+			}
+		} else if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
+			throw new IOException("no such channel: " + url);
+		} else {
+			throw new IOException(String.format(
+					"inavlid HTTP response code: %d %s",
+					responseCode,
+					connection.getResponseMessage()));
 		}
-		
 	}
 
-	private HttpURLConnection attemptWriteRequestString(String requestString) throws IOException {
-		final byte[] requestBytes = requestString.getBytes("UTF-8");
+	HttpURLConnection attemptRead() throws IOException {
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+		// Make request...
+		final int responseCode = connection.getResponseCode();
+
+		if (responseCode == HttpURLConnection.HTTP_OK) {
+			return connection;
+		} else if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
+			throw new IOException("no such channel: " + url);
+		} else {
+			throw new IOException(String.format(
+					"inavlid HTTP response code: %d %s",
+					responseCode,
+					connection.getResponseMessage()));
+		}
+	}
+
+	HttpURLConnection attemptWrite(byte[] bytes) throws IOException {
 		// Do request
 		final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
 		connection.setRequestMethod("POST");
-		connection.setRequestProperty("Content-Type",
-				"application/x-www-form-urlencoded; charset=utf-8");
-		connection.setRequestProperty("Content-Length", Integer.toString(requestBytes.length));
+		connection.setRequestProperty("Content-Type", "application/octet-stream");
+		connection.setRequestProperty("Content-Length", Integer.toString(bytes.length));
 
 		connection.setDoOutput(true);
 		OutputStream os = null;
 		try {
 			os = connection.getOutputStream();
-			os.write(requestBytes);
+			os.write(bytes);
 			os.flush();
 		} finally {
 			if (os != null) {
@@ -88,29 +113,5 @@ public class RendezvousChannel {
 					responseCode,
 					connection.getResponseMessage()));
 		}
-	}
-
-	synchronized HttpURLConnection attemptRead() throws IOException {
-		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
-		// Make request...
-		final int responseCode = connection.getResponseCode();
-
-		if (responseCode == HttpURLConnection.HTTP_OK) {
-			return connection;
-		} else if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
-			throw new IOException("no such channel: " + url);
-		} else {
-			throw new IOException(String.format(
-					"inavlid HTTP response code: %d %s",
-					responseCode,
-					connection.getResponseMessage()));
-		}
-	}
-
-	synchronized HttpURLConnection attemptWrite(byte[] bytes) throws IOException {
-		// Form request body
-		final String b64bytes = Base64.encodeBase64String(bytes);
-		return attemptWriteRequestString("data=" + b64bytes);
 	}
 }

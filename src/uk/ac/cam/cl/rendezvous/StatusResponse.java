@@ -6,22 +6,15 @@ import java.net.HttpURLConnection;
 import org.apache.commons.io.IOUtils;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 
-final class RendezvousResponse {
-	
-	private static final Gson GSON = new GsonBuilder()
-			.registerTypeAdapter(byte[].class, new ByteArrayGsonSerializer())
-			.disableHtmlEscaping()
-			.create();
-	
+final class StatusResponse {
 	// Response codes
 	public static final int CLOSED = -1;
 	public static final int OK = 0;
 	public static final int TIMED_OUT = 2;
 	
-	public static RendezvousResponse fromConnection(HttpURLConnection connection)
+	public static StatusResponse fromConnection(HttpURLConnection connection)
 			throws IOException {
 		// Check response code
 		if (connection.getResponseCode() != 200) {
@@ -31,26 +24,30 @@ final class RendezvousResponse {
 		if (connection.getContentLength() <= 0) {
 			throw new IOException("response was empty response");
 		}
+		// Check content is JSON-encoded
+		if (!connection.getContentType().equals("application/json")) {
+			throw new IOException("status response was not JSON-encoded");
+		}
 		// TODO replace these checks with guava preconditions methods?
 		
 		// Read bytes
 		byte[] responseBytes = new byte[connection.getContentLength()];
 		IOUtils.readFully(connection.getInputStream(), responseBytes);
 		
-		return GSON.fromJson(new String(responseBytes, "UTF-8"), RendezvousResponse.class);
+		final String responseString = new String(responseBytes, "UTF-8");
+		return new Gson().fromJson(responseString, StatusResponse.class);
 	}
 	
-	private RendezvousResponse() {
+	private StatusResponse() {
 		super();
 	}
 
 	public int code;
 	public String status;
 	public String message;
-	public byte[] data;
 	
 	@Override
 	public String toString() {
-		return GSON.toJson(this);
+		return new Gson().toJson(this);
 	}
 }
